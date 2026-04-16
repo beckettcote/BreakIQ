@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BreakIQ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Personal Surf Intelligence</p>
+        <h1>BreakIQ</h1>
+        <p class="hero-text">
+          Log what you saw, match it to real conditions, and let the app learn when your spots actually light up.
+        </p>
+      </div>
+      <div class="hero-card">
+        <p class="hero-label">Tomorrow's best for you</p>
+        <h2 id="hero-best-spot">Loading...</h2>
+        <p id="hero-best-summary" class="hero-summary"></p>
+      </div>
+    </header>
+
+    <main class="dashboard">
+      <section class="panel panel-wide">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Forecast Engine</p>
+            <h2>Best Spots For You Tomorrow</h2>
+            <p id="forecast-status" class="section-note">Loading live marine forecast...</p>
+          </div>
+          <div class="button-row">
+            <button id="refresh-button" class="secondary-button" type="button">Refresh live forecast</button>
+          </div>
+        </div>
+        <div id="forecast-grid" class="forecast-grid"></div>
+        <div class="section-actions">
+          <button id="forecast-toggle" class="ghost-button" type="button">See all spots</button>
+        </div>
+      </section>
+
+      <section class="panel panel-wide">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Live Snapshot</p>
+            <h2>Current Conditions</h2>
+            <p id="current-status" class="section-note">Loading current marine conditions...</p>
+          </div>
+        </div>
+        <div id="current-grid" class="forecast-grid"></div>
+        <div class="section-actions">
+          <button id="current-toggle" class="ghost-button" type="button">See all spots</button>
+        </div>
+      </section>
+
+      <section class="panel panel-wide workspace-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Your Workspace</p>
+            <h2>Log a Session, Your Spots, Add a Custom Spot, Session History</h2>
+            <p class="section-note">The live forecast stays up top. Open the tools below only when you need them.</p>
+          </div>
+        </div>
+
+        <div class="workspace-stack">
+          <details class="workspace-card" open>
+            <summary class="workspace-summary">
+              <div>
+                <p class="eyebrow">Quick Log</p>
+                <h3>Log a Session</h3>
+              </div>
+              <span class="workspace-toggle"></span>
+            </summary>
+            <form id="session-form" class="session-form workspace-content">
+              <label>
+                Date
+                <input name="date" type="date" required>
+              </label>
+              <label>
+                Surf Time
+                <input name="time" type="time" value="07:00" required>
+              </label>
+              <label>
+                Spot
+                <select name="spot" required></select>
+              </label>
+              <label>
+                Rating
+                <input name="rating" type="range" min="1" max="10" value="7">
+                <span id="rating-value" class="inline-value">7 / 10</span>
+              </label>
+              <label>
+                Wave Type
+                <select name="waveType" required>
+                  <option value="clean">Clean</option>
+                  <option value="choppy">Choppy</option>
+                  <option value="closing out">Closing out</option>
+                  <option value="peeling">Peeling</option>
+                </select>
+              </label>
+              <label>
+                Size
+                <select name="size" required>
+                  <option value="knee">Knee</option>
+                  <option value="waist">Waist</option>
+                  <option value="chest">Chest</option>
+                  <option value="head">Head</option>
+                  <option value="overhead">Overhead</option>
+                </select>
+              </label>
+              <label>
+                Crowd
+                <select name="crowd" required>
+                  <option value="empty">Empty</option>
+                  <option value="few">Few</option>
+                  <option value="crowded">Crowded</option>
+                </select>
+              </label>
+              <label>
+                Notes
+                <textarea name="notes" rows="4" placeholder="Lefts working on the inside..."></textarea>
+              </label>
+              <p id="session-status" class="section-note">Conditions will be pulled automatically from weather and marine data when you save.</p>
+              <button class="primary-button" type="submit">Save session</button>
+            </form>
+          </details>
+
+          <details class="workspace-card">
+            <summary class="workspace-summary">
+              <div>
+                <p class="eyebrow">Your Spots</p>
+                <h3>Your Spots</h3>
+              </div>
+              <span class="workspace-toggle"></span>
+            </summary>
+            <div class="workspace-content">
+              <p class="section-note">Built-in spot notes and learned profiles live here. Custom spots can be removed directly from their profile card.</p>
+              <div id="spot-profiles" class="spot-profiles"></div>
+            </div>
+          </details>
+
+          <details class="workspace-card">
+            <summary class="workspace-summary">
+              <div>
+                <p class="eyebrow">Add a Custom Spot</p>
+                <h3>Add a Custom Spot</h3>
+              </div>
+              <span class="workspace-toggle"></span>
+            </summary>
+            <div class="workspace-content">
+              <p class="section-note">Search by place name, click the map, or type coordinates yourself.</p>
+              <div class="spot-manager">
+                <form id="spot-form" class="session-form">
+                  <label>
+                    Spot Name
+                    <input name="name" type="text" placeholder="Secret Left" required>
+                  </label>
+                  <label>
+                    Find by place name
+                    <div class="search-row">
+                      <input id="geocode-query" name="search" type="text" placeholder="Biddeford Pool, ME">
+                      <button id="search-spot-button" class="secondary-button" type="button">Search</button>
+                    </div>
+                  </label>
+                  <div id="geocode-results" class="search-results"></div>
+                  <label>
+                    Latitude
+                    <input name="latitude" type="number" min="-90" max="90" step="0.000001" required>
+                  </label>
+                  <label>
+                    Longitude
+                    <input name="longitude" type="number" min="-180" max="180" step="0.000001" required>
+                  </label>
+                  <label>
+                    Best Tide
+                    <select name="bestTide" required>
+                      <option value="unknown">Don't know</option>
+                      <option value="low">Low</option>
+                      <option value="mid" selected>Mid</option>
+                      <option value="high">High</option>
+                    </select>
+                  </label>
+                  <button class="primary-button" type="submit">Add custom spot</button>
+                </form>
+
+                <div class="map-column">
+                  <div id="spot-map" class="spot-map"></div>
+                  <p id="map-status" class="section-note">Click anywhere on the map to fill in coordinates for a new spot.</p>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <details class="workspace-card">
+            <summary class="workspace-summary">
+              <div>
+                <p class="eyebrow">Recent Memory</p>
+                <h3>Session History</h3>
+              </div>
+              <span class="workspace-toggle"></span>
+            </summary>
+            <div class="workspace-content">
+              <div id="session-list" class="session-list"></div>
+            </div>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>Forecast data from <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>. Tide estimates are model-based and can be rough near the coast.</p>
+    </footer>
+  </div>
+
+  <template id="forecast-card-template">
+    <article class="forecast-card">
+      <div class="forecast-card-top">
+        <div>
+          <p class="forecast-label">Prediction</p>
+          <h3 class="forecast-spot"></h3>
+        </div>
+        <span class="forecast-score"></span>
+      </div>
+      <p class="forecast-window"></p>
+      <p class="forecast-details"></p>
+      <div class="forecast-tags"></div>
+    </article>
+  </template>
+
+  <template id="current-card-template">
+    <article class="forecast-card">
+      <div class="forecast-card-top">
+        <div>
+          <p class="forecast-label">Current</p>
+          <h3 class="forecast-spot"></h3>
+        </div>
+        <span class="forecast-score current-badge"></span>
+      </div>
+      <p class="forecast-window"></p>
+      <p class="forecast-details"></p>
+      <div class="forecast-tags"></div>
+    </article>
+  </template>
+
+  <template id="profile-card-template">
+    <details class="profile-card">
+      <summary class="profile-summary-row">
+        <div>
+          <h3 class="profile-spot"></h3>
+          <p class="profile-summary"></p>
+        </div>
+        <div class="profile-summary-actions">
+          <button class="ghost-button profile-remove-button" type="button" hidden>Remove</button>
+          <span class="profile-toggle"></span>
+        </div>
+      </summary>
+      <dl class="profile-metrics"></dl>
+    </details>
+  </template>
+
+  <template id="session-card-template">
+    <article class="session-card">
+      <div class="session-card-top">
+        <div>
+          <p class="session-date"></p>
+          <h3 class="session-spot"></h3>
+        </div>
+        <span class="session-rating"></span>
+      </div>
+      <p class="session-meta"></p>
+      <p class="session-notes"></p>
+      <div class="session-conditions"></div>
+      <div class="session-actions">
+        <button class="ghost-button session-delete-button" type="button">Delete log</button>
+      </div>
+    </article>
+  </template>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script src="app.js"></script>
+</body>
+</html>
