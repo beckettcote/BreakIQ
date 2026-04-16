@@ -7,8 +7,8 @@ const builtInSpots = [
     id: "crescent-beach",
     name: "Crescent Beach",
     bestTide: "mid",
-    latitude: 43.5634,
-    longitude: -70.2004,
+    latitude: 43.564307,
+    longitude: -70.225426,
     builtIn: true,
     description: "Remote and fickle. Best on strong E swells in winter when energy pushes through Fishermans Island Passage and lights up lippy rights and lefts in the bay.",
     profileDefaults: {
@@ -22,8 +22,8 @@ const builtInSpots = [
     id: "reid-state-park",
     name: "Reid State Park",
     bestTide: "mid",
-    latitude: 43.8188,
-    longitude: -69.7342,
+    latitude: 43.777741,
+    longitude: -69.728837,
     builtIn: true,
     description: "South-east facing stretch that likes winter ESE swell. Usually a bit messy but can offer good lefts and rights over shifting banks away from bigger Southern Maine crowds.",
     profileDefaults: {
@@ -37,8 +37,8 @@ const builtInSpots = [
     id: "popham-beach",
     name: "Popham Beach",
     bestTide: "mid",
-    latitude: 43.7563,
-    longitude: -69.7869,
+    latitude: 43.733907,
+    longitude: -69.796833,
     builtIn: true,
     description: "Rivermouths and sandbars positioned for fall and winter hurricane swell. Best around chest to head high, with occasional empty barrels when the banks line up.",
     profileDefaults: {
@@ -52,8 +52,8 @@ const builtInSpots = [
     id: "higgins-beach",
     name: "Higgins Beach",
     bestTide: "low",
-    latitude: 43.5478,
-    longitude: -70.2903,
+    latitude: 43.5600843,
+    longitude: -70.27977,
     builtIn: true,
     description: "Open south-facing bay that can light up on hurricane swell. Usually sloppy, but when it turns on it can handle serious size and long walls.",
     profileDefaults: {
@@ -67,8 +67,8 @@ const builtInSpots = [
     id: "scarborough-beach",
     name: "Scarborough Beach",
     bestTide: "mid",
-    latitude: 43.5465,
-    longitude: -70.3334,
+    latitude: 43.54523,
+    longitude: -70.30886,
     builtIn: true,
     description: "Likes summer E and ESE swell for friendly A-frame peaks. Usually a good beginner option and less reliable on straight south swell.",
     profileDefaults: {
@@ -170,38 +170,15 @@ const builtInSpots = [
   }
 ];
 
-const seedSessions = [
-  {
-    date: "2026-04-07",
-    spot: "Higgins Beach",
-    rating: 8,
-    waveType: "peeling",
-    size: "chest",
-    crowd: "few",
-    notes: "Lefts lined up on the inside bar.",
-    conditions: { swellDirection: 124, swellHeight: 4.3, period: 11, windDirection: 320, windSpeed: 5, tide: "mid" }
-  },
-  {
-    date: "2026-04-03",
-    spot: "Popham Beach",
-    rating: 7,
-    waveType: "clean",
-    size: "waist",
-    crowd: "empty",
-    notes: "Smaller but organized, better on the push.",
-    conditions: { swellDirection: 118, swellHeight: 3.2, period: 10, windDirection: 305, windSpeed: 4, tide: "mid" }
-  },
-  {
-    date: "2026-04-11",
-    spot: "Ogunquit Rivermouth",
-    rating: 8,
-    waveType: "clean",
-    size: "head",
-    crowd: "crowded",
-    notes: "Long walls if you got one early.",
-    conditions: { swellDirection: 145, swellHeight: 5.5, period: 12, windDirection: 295, windSpeed: 7, tide: "low" }
-  }
-];
+const seedSessions = [];
+
+function isLegacySeedSession(session) {
+  return (
+    (session.spot === "Higgins Beach" && session.date === "2026-04-07" && session.notes === "Lefts lined up on the inside bar.") ||
+    (session.spot === "Popham Beach" && session.date === "2026-04-03" && session.notes === "Smaller but organized, better on the push.") ||
+    (session.spot === "Ogunquit Rivermouth" && session.date === "2026-04-11" && session.notes === "Long walls if you got one early.")
+  );
+}
 
 const form = document.querySelector("#session-form");
 const spotForm = document.querySelector("#spot-form");
@@ -253,7 +230,7 @@ function loadState() {
     if (stored) {
       const parsed = JSON.parse(stored);
       return {
-        sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [...seedSessions],
+        sessions: Array.isArray(parsed.sessions) ? parsed.sessions.filter((session) => !isLegacySeedSession(session)) : [],
         customSpots: Array.isArray(parsed.customSpots) ? parsed.customSpots : []
       };
     }
@@ -261,7 +238,7 @@ function loadState() {
     console.warn("Unable to load saved surf data, resetting.", error);
   }
 
-  return { sessions: [...seedSessions], customSpots: [] };
+  return { sessions: [], customSpots: [] };
 }
 
 function persistState() {
@@ -344,6 +321,16 @@ function scoreByWaveHeightAndCleanliness(spot, forecast) {
       return { baseScore: 1, maxScore: 1, surfaceQuality, reason: "Too small even though it looks clean" };
     }
     return { baseScore: 0, maxScore: 0, surfaceQuality, reason: "Too small and messy" };
+  }
+
+  if (height < 2.25) {
+    if (surfaceQuality === "clean") {
+      return { baseScore: 1.5, maxScore: 2, surfaceQuality, reason: "Very small but somewhat clean" };
+    }
+    if (surfaceQuality === "surfable_messy") {
+      return { baseScore: 0.5, maxScore: 1, surfaceQuality, reason: "Barely rideable and very small" };
+    }
+    return { baseScore: 0, maxScore: 0, surfaceQuality, reason: "Tiny and messy" };
   }
 
   if (height < 3) {
@@ -466,6 +453,61 @@ function computeForecastScore(spotName) {
   return computeForecastScoreForSpot(spot, forecast);
 }
 
+function buildPreferenceMatch(spotName, forecast) {
+  const sessions = getSpotSessions(spotName)
+    .filter((session) => session.rating >= 8)
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, 5);
+
+  if (!sessions.length) {
+    return null;
+  }
+
+  let bestMatch = null;
+
+  sessions.forEach((session) => {
+    let similarity = 0;
+    const reasons = [];
+
+    if (angularDifference(forecast.swellDirection, session.conditions.swellDirection) <= 20) {
+      similarity += 1.2;
+      reasons.push("Swell direction matches one of your best sessions");
+    }
+    if (Math.abs(forecast.swellHeight - session.conditions.swellHeight) <= 1.0) {
+      similarity += 1.1;
+      reasons.push("Wave height matches one of your best sessions");
+    }
+    if (Math.abs(forecast.period - session.conditions.period) <= 2) {
+      similarity += 0.6;
+      reasons.push("Period is close to a top-rated session");
+    }
+    if (angularDifference(forecast.windDirection, session.conditions.windDirection) <= 35) {
+      similarity += 0.8;
+      reasons.push("Wind direction matches a top-rated session");
+    }
+    if (forecast.windSpeed <= session.conditions.windSpeed + 3) {
+      similarity += 0.6;
+      reasons.push("Wind speed is in the range you liked");
+    }
+    if (forecast.tide === session.conditions.tide) {
+      similarity += 0.9;
+      reasons.push(`Tide matches your ${session.rating}/10 session`);
+    }
+
+    const candidate = {
+      session,
+      similarity,
+      reasons
+    };
+
+    if (!bestMatch || candidate.similarity > bestMatch.similarity) {
+      bestMatch = candidate;
+    }
+  });
+
+  return bestMatch;
+}
+
 function computeForecastScoreForSpot(spot, forecast) {
   const spotName = spot?.name;
   const profileSessions = getGoodSessions(spotName);
@@ -475,12 +517,13 @@ function computeForecastScoreForSpot(spot, forecast) {
 
   const surfability = scoreByWaveHeightAndCleanliness(spot, forecast);
   const preferredTide = spot.bestTide && spot.bestTide !== "unknown" ? spot.bestTide : null;
+  const preferenceMatch = buildPreferenceMatch(spotName, forecast);
 
   if (!profileSessions.length) {
     const tideAdjustedBase = preferredTide && forecast.tide === preferredTide
       ? Math.min(surfability.maxScore, surfability.baseScore + 0.5)
       : surfability.baseScore;
-    const learningScore = Math.max(0, Math.min(surfability.maxScore, Math.round(tideAdjustedBase)));
+    const learningScore = Math.max(0, Math.min(surfability.maxScore, roundToHalf(tideAdjustedBase)));
     const reasons = [surfability.reason];
     if (preferredTide && forecast.tide === preferredTide) {
       reasons.push(`Hits ${preferredTide} tide, which suits this spot`);
@@ -502,6 +545,7 @@ function computeForecastScoreForSpot(spot, forecast) {
   const targetTide = preferredTide || loggedTide;
 
   let matchBonus = 0;
+  let personalLift = 0;
   const why = [];
 
   if (angularDifference(forecast.swellDirection, avgSwellDirection) <= 20) {
@@ -523,15 +567,44 @@ function computeForecastScoreForSpot(spot, forecast) {
     why.push(`Best on ${targetTide} tide, but forecast is ${forecast.tide}`);
   }
 
+  if (preferenceMatch?.similarity >= 3.5) {
+    personalLift = 1.5;
+    why.push(`Looks a lot like your ${preferenceMatch.session.rating}/10 ${spotName} session`);
+  } else if (preferenceMatch?.similarity >= 2.5) {
+    personalLift = 1;
+    why.push(`Looks somewhat like one of your best ${spotName} sessions`);
+  } else if (preferenceMatch?.similarity >= 1.5) {
+    personalLift = 0.5;
+    why.push(`Shares some traits with a good ${spotName} session`);
+  }
+
   why.unshift(surfability.reason);
-  const boostedScore = surfability.baseScore + matchBonus;
-  const score = Math.max(0, Math.min(surfability.maxScore, Math.round(boostedScore)));
+  const personalizedMaxScore = preferenceMatch?.session?.rating >= 9
+    ? Math.max(surfability.maxScore, 4)
+    : preferenceMatch?.session?.rating >= 8
+      ? Math.max(surfability.maxScore, 3)
+      : surfability.maxScore;
+  const boostedScore = surfability.baseScore + matchBonus + personalLift;
+  const score = Math.max(0, Math.min(personalizedMaxScore, roundToHalf(boostedScore)));
   return { score, label: scoreLabel(score), why };
 }
 
+function roundToHalf(value) {
+  return Math.round(value * 2) / 2;
+}
+
+function formatScore(score) {
+  if (score === null || !Number.isFinite(score)) return "-/5";
+  return `${Number.isInteger(score) ? score.toFixed(0) : score.toFixed(1)}/5`;
+}
+
 function scoreLabel(score) {
-  const labels = { 5: "Firing", 4: "Very good", 3: "Worth checking", 2: "Maybe", 1: "Marginal", 0: "Probably off" };
-  return labels[score] || "Probably off";
+  if (score >= 4.5) return "Firing";
+  if (score >= 3.5) return "Very good";
+  if (score >= 2.5) return "Worth checking";
+  if (score >= 1.5) return "Maybe";
+  if (score >= 0.5) return "Marginal";
+  return "Probably off";
 }
 
 function formatBestTide(bestTide) {
@@ -543,19 +616,19 @@ function describeWaveFace(heightFeet) {
   if (!Number.isFinite(heightFeet) || heightFeet <= 0) {
     return "~0 ft face - Unknown";
   }
-  if (heightFeet < 1.5) {
+  if (heightFeet < 2.25) {
     return "~1 ft face - Ankle-shin high";
   }
-  if (heightFeet < 2.5) {
+  if (heightFeet < 3.25) {
     return "~2 ft face - Knee-thigh high";
   }
-  if (heightFeet < 4) {
+  if (heightFeet < 4.75) {
     return "~3 ft face - Waist-belly high";
   }
-  if (heightFeet < 6.5) {
+  if (heightFeet < 7) {
     return "~5 ft face - Head high";
   }
-  if (heightFeet < 9) {
+  if (heightFeet < 9.5) {
     return "~7 ft face - Overhead";
   }
   return "~10 ft face - Double overhead";
@@ -637,17 +710,19 @@ function renderForecasts() {
   visibleResults.forEach(({ spot, forecast, prediction }) => {
     const node = template.content.firstElementChild.cloneNode(true);
     node.querySelector(".forecast-spot").textContent = spot.name;
-    node.querySelector(".forecast-score").textContent = prediction.score === null ? "-/5" : `${prediction.score}/5`;
+    node.querySelector(".forecast-score").textContent = formatScore(prediction.score);
     node.querySelector(".forecast-window").textContent = prediction.score === null ? "Live forecast unavailable" : (forecast?.bestWindow || "Best window loading");
     node.querySelector(".forecast-details").textContent = forecast
       ? `${forecast.swellHeight.toFixed(1)} ft @ ${forecast.period.toFixed(1)}s from ${formatDirection(forecast.swellDirection)} with ${forecast.windSpeed.toFixed(0)} mph ${formatDirection(forecast.windDirection)} wind on a ${forecast.tide} tide.`
       : "Waiting for live marine and weather data for this spot.";
 
     const tagContainer = node.querySelector(".forecast-tags");
-    const faceTag = document.createElement("span");
-    faceTag.className = "tag";
-    faceTag.textContent = describeWaveFace(forecast.swellHeight);
-    tagContainer.append(faceTag);
+    if (forecast) {
+      const faceTag = document.createElement("span");
+      faceTag.className = "tag";
+      faceTag.textContent = describeWaveFace(forecast.swellHeight);
+      tagContainer.append(faceTag);
+    }
 
     prediction.why.forEach((reason) => {
       const tag = document.createElement("span");
@@ -678,7 +753,7 @@ function renderForecasts() {
 
   const top = results[0];
   if (top) {
-    heroSpot.textContent = top.prediction.score === null ? "Live forecast loading" : `${top.spot.name} ${top.prediction.score}/5`;
+    heroSpot.textContent = top.prediction.score === null ? "Live forecast loading" : `${top.spot.name} ${formatScore(top.prediction.score)}`;
     heroSummary.textContent = top.prediction.score === null
       ? "Waiting for live marine and weather data before ranking tomorrow's spots."
       : `${top.prediction.label}. ${top.prediction.why[0] || "Still learning this spot from your logs."}`;
@@ -703,7 +778,7 @@ function renderCurrentConditions() {
     const surfability = currentData ? scoreByWaveHeightAndCleanliness(spot, currentData) : null;
     const node = template.content.firstElementChild.cloneNode(true);
     node.querySelector(".forecast-spot").textContent = spot.name;
-    node.querySelector(".forecast-score").textContent = surfability ? `${Math.round(surfability.baseScore)}/5` : "-/5";
+    node.querySelector(".forecast-score").textContent = surfability ? formatScore(roundToHalf(surfability.baseScore)) : "-/5";
     node.querySelector(".forecast-window").textContent = currentData ? `Observed around ${currentData.observedAt}` : "Current conditions unavailable";
     node.querySelector(".forecast-details").textContent = currentData
       ? `${currentData.swellHeight.toFixed(1)} ft @ ${currentData.period.toFixed(1)}s from ${formatDirection(currentData.swellDirection)} with ${currentData.windSpeed.toFixed(0)} mph ${formatDirection(currentData.windDirection)} wind on a ${currentData.tide} tide.`
