@@ -308,6 +308,7 @@ function classifySurfaceQuality(spot, forecast) {
 
   if (forecast.windSpeed <= 8 && offshoreDifference <= 45) return "clean";
   if (forecast.windSpeed <= 12 && offshoreDifference <= 75) return "clean";
+  if (forecast.windSpeed <= 10 && offshoreDifference <= 110) return "slightly_choppy";
   if (forecast.windSpeed <= 14) return "surfable_messy";
   return "not_surfable_messy";
 }
@@ -320,15 +321,21 @@ function scoreByWaveHeightAndCleanliness(spot, forecast) {
     if (surfaceQuality === "clean") {
       return { baseScore: 1, maxScore: 1, surfaceQuality, reason: "Too small even though it looks clean" };
     }
+    if (surfaceQuality === "slightly_choppy") {
+      return { baseScore: 0.5, maxScore: 0.5, surfaceQuality, reason: "Tiny and a little textured" };
+    }
     return { baseScore: 0, maxScore: 0, surfaceQuality, reason: "Too small and messy" };
   }
 
   if (height < 2.25) {
     if (surfaceQuality === "clean") {
-      return { baseScore: 1.5, maxScore: 1.5, surfaceQuality, reason: "Very small but somewhat clean" };
+      return { baseScore: 1, maxScore: 1, surfaceQuality, reason: "Very small but clean" };
+    }
+    if (surfaceQuality === "slightly_choppy") {
+      return { baseScore: 0.5, maxScore: 0.5, surfaceQuality, reason: "Very small with a little chop on it" };
     }
     if (surfaceQuality === "surfable_messy") {
-      return { baseScore: 0.5, maxScore: 1, surfaceQuality, reason: "Barely rideable and very small" };
+      return { baseScore: 0, maxScore: 0, surfaceQuality, reason: "Very small and choppy" };
     }
     return { baseScore: 0, maxScore: 0, surfaceQuality, reason: "Tiny and messy" };
   }
