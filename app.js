@@ -190,6 +190,7 @@ const profilesContainer = document.querySelector("#spot-profiles");
 const sessionsContainer = document.querySelector("#session-list");
 const heroSpot = document.querySelector("#hero-best-spot");
 const heroSummary = document.querySelector("#hero-best-summary");
+const heroCta = document.querySelector("#hero-cta");
 const ratingInput = form.elements.rating;
 const ratingValue = document.querySelector("#rating-value");
 const spotSelect = form.elements.spot;
@@ -519,12 +520,32 @@ function computeForecastScoreForSpot(spot, forecast) {
   const spotName = spot?.name;
   const profileSessions = getGoodSessions(spotName);
 
-  if (!forecast) return { score: null, label: "Live forecast unavailable", why: ["Waiting for live weather data."] };
-  if (!spot) return { score: 0, label: "No spot", why: [] };
+  if (!forecast) {
+    return {
+      score: null,
+      label: "Live forecast unavailable",
+      why: ["Waiting for live weather data."],
+      confidence: { label: "Waiting on live data", className: "tag-confidence-low" },
+      breakdown: []
+    };
+  }
+  if (!spot) return { score: 0, label: "No spot", why: [], confidence: { label: "Low confidence", className: "tag-confidence-low" }, breakdown: [] };
 
   const surfability = scoreByWaveHeightAndCleanliness(spot, forecast);
   const preferredTide = spot.bestTide && spot.bestTide !== "unknown" ? spot.bestTide : null;
   const preferenceMatch = buildPreferenceMatch(spotName, forecast);
+  const logsCount = profileSessions.length;
+  const genericBreakdown = buildForecastBreakdown({
+    forecast,
+    surfability,
+    preferredTide,
+    targetTide: preferredTide,
+    avgSwellDirection: null,
+    avgSwellHeight: null,
+    avgWindDirection: null,
+    avgWindSpeed: null,
+    preferenceMatch
+  });
 
   if (!profileSessions.length) {
     const tideAdjustedBase = preferredTide && forecast.tide === preferredTide
@@ -540,7 +561,9 @@ function computeForecastScoreForSpot(spot, forecast) {
     return {
       score: learningScore,
       label: scoreLabel(learningScore),
-      why: [...reasons, "Still learning this spot from your logs."]
+      why: [...reasons, "Still learning this spot from your logs."],
+      confidence: buildConfidence(logsCount, preferenceMatch, false),
+      breakdown: genericBreakdown
     };
   }
 
@@ -594,7 +617,23 @@ function computeForecastScoreForSpot(spot, forecast) {
       : surfability.maxScore;
   const boostedScore = surfability.baseScore + matchBonus + personalLift;
   const score = Math.max(0, Math.min(personalizedMaxScore, roundToHalf(boostedScore)));
-  return { score, label: scoreLabel(score), why };
+  return {
+    score,
+    label: scoreLabel(score),
+    why,
+    confidence: buildConfidence(logsCount, preferenceMatch, true),
+    breakdown: buildForecastBreakdown({
+      forecast,
+      surfability,
+      preferredTide,
+      targetTide,
+      avgSwellDirection,
+      avgSwellHeight,
+      avgWindDirection,
+      avgWindSpeed,
+      preferenceMatch
+    })
+  };
 }
 
 function roundToHalf(value) {
@@ -613,6 +652,97 @@ function scoreLabel(score) {
   if (score >= 1.5) return "Maybe";
   if (score >= 0.5) return "Marginal";
   return "Probably off";
+}
+
+function buildConfidence(logsCount, preferenceMatch, hasPersonalHistory) {
+  let confidenceValue = Math.min(logsCount, 6) / 6;
+  if (preferenceMatch?.similarity >= 3.5) confidenceValue += 0.45;
+  else if (preferenceMatch?.similarity >= 2.5) confidenceValue += 0.3;
+  else if (preferenceMatch?.similarity >= 1.5) confidenceValue += 0.15;
+
+  if (!hasPersonalHistory) confidenceValue *= 0.55;
+
+  if (confidenceValue >= 0.9) {
+    return { label: "High confidence", className: "tag-confidence-high" };
+  }
+  if (confidenceValue >= 0.45) {
+    return { label: "Medium confidence", className: "tag-confidence-medium" };
+  }
+  return { label: "Low confidence", className: "tag-confidence-low" };
+}
+
+function buildForecastBreakdown({
+  forecast,
+  surfability,
+  preferredTide,
+  targetTide,
+  avgSwellDirection,
+  avgSwellHeight,
+  avgWindDirection,
+  avgWindSpeed,
+  preferenceMatch
+}) {
+  const swellMatch = Number.isFinite(avgSwellDirection)
+    ? angularDifference(forecast.swellDirection, avgSwellDirection) <= 20 && Math.abs(forecast.swellHeight - avgSwellHeight) <= 1.5
+    : false;
+  const tideMatch = targetTide ? forecast.tide === targetTide : preferredTide ? forecast.tide === preferredTide : null;
+
+  return [
+    {
+      label: "Swell",
+      value: swellMatch
+        ? "Close to your better sessions"
+        : Number.isFinite(avgSwellDirection)
+          ? "Not quite your usual zone"
+          : "Live swell only for now"
+    },
+    {
+      label: "Wind",
+      value: surfability.surfaceQuality === "clean"
+        ? "Clean setup"
+        : surfability.surfaceQuality === "slightly_choppy"
+          ? "A little texture"
+          : "Wind is hurting shape"
+    },
+    {
+      label: "Tide",
+      value: targetTide
+        ? tideMatch
+          ? `${forecast.tide} tide lines up`
+          : `${forecast.tide} tide, not ideal`
+        : "Still learning your tide preference"
+    },
+    {
+      label: "Memory",
+      value: preferenceMatch?.similarity >= 3.5
+        ? `Looks like your ${preferenceMatch.session.rating}/10 session`
+        : preferenceMatch?.similarity >= 2
+          ? "Shares traits with a good log"
+          : "Needs more session history"
+    }
+  ];
+}
+
+function renderBreakdown(container, breakdown) {
+  container.innerHTML = "";
+  container.hidden = !breakdown.length;
+  if (!breakdown.length) return;
+  breakdown.forEach((item) => {
+    const block = document.createElement("div");
+    block.className = "forecast-metric";
+    block.dataset.metric = item.label.toLowerCase();
+
+    const label = document.createElement("span");
+    label.className = "forecast-metric-label";
+    label.textContent = item.label;
+
+    const value = document.createElement("span");
+    value.className = "forecast-metric-value";
+    value.textContent = item.value;
+
+    block.append(label, value);
+    container.append(block);
+  });
 }
 
 function formatBestTide(bestTide) {
@@ -723,6 +853,7 @@ function renderForecasts() {
     node.querySelector(".forecast-details").textContent = forecast
       ? `${forecast.swellHeight.toFixed(1)} ft @ ${forecast.period.toFixed(1)}s from ${formatDirection(forecast.swellDirection)} with ${forecast.windSpeed.toFixed(0)} mph ${formatDirection(forecast.windDirection)} wind on a ${forecast.tide} tide.`
       : "Waiting for live marine and weather data for this spot.";
+    renderBreakdown(node.querySelector(".forecast-breakdown"), prediction.breakdown || []);
 
     const tagContainer = node.querySelector(".forecast-tags");
     if (forecast) {
@@ -730,6 +861,13 @@ function renderForecasts() {
       faceTag.className = "tag";
       faceTag.textContent = describeWaveFace(forecast.swellHeight);
       tagContainer.append(faceTag);
+    }
+
+    if (prediction.confidence) {
+      const confidenceTag = document.createElement("span");
+      confidenceTag.className = `tag ${prediction.confidence.className}`;
+      confidenceTag.textContent = prediction.confidence.label;
+      tagContainer.append(confidenceTag);
     }
 
     prediction.why.forEach((reason) => {
@@ -764,7 +902,7 @@ function renderForecasts() {
     heroSpot.textContent = top.prediction.score === null ? "Live forecast loading" : `${top.spot.name} ${formatScore(top.prediction.score)}`;
     heroSummary.textContent = top.prediction.score === null
       ? "Waiting for live marine and weather data before ranking tomorrow's spots."
-      : `${top.prediction.label}. ${top.prediction.why[0] || "Still learning this spot from your logs."}`;
+      : `${top.prediction.label}. ${top.prediction.breakdown?.[3]?.value || top.prediction.why[0] || "Still learning this spot from your logs."} ${top.prediction.confidence ? ` ${top.prediction.confidence.label}.` : ""}`;
   }
 }
 
@@ -791,6 +929,12 @@ function renderCurrentConditions() {
     node.querySelector(".forecast-details").textContent = currentData
       ? `${currentData.swellHeight.toFixed(1)} ft @ ${currentData.period.toFixed(1)}s from ${formatDirection(currentData.swellDirection)} with ${currentData.windSpeed.toFixed(0)} mph ${formatDirection(currentData.windDirection)} wind on a ${currentData.tide} tide.`
       : "Waiting for live marine and weather data for this spot.";
+    renderBreakdown(node.querySelector(".forecast-breakdown"), currentData ? [
+      { label: "Surface", value: surfability.reason },
+      { label: "Wind", value: surfability.surfaceQuality === "clean" ? "Clean setup" : surfability.surfaceQuality === "slightly_choppy" ? "A little texture" : "Wind-affected" },
+      { label: "Tide", value: `${currentData.tide} tide right now` },
+      { label: "Read", value: "Live snapshot, not a prediction" }
+    ] : []);
 
     const tagContainer = node.querySelector(".forecast-tags");
     if (currentData) {
@@ -1430,6 +1574,13 @@ currentToggle.addEventListener("click", () => {
 
 refreshButton.addEventListener("click", () => {
   refreshForecasts();
+});
+
+heroCta?.addEventListener("click", () => {
+  const sessionPanel = form.closest("details");
+  if (sessionPanel) sessionPanel.open = true;
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+  form.elements.spot?.focus();
 });
 
 initializeMap();
